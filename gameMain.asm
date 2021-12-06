@@ -14,26 +14,26 @@
 
         ; Turn off interrupts to stop LIBSCREEN_WAIT failing every so 
         ; often when the kernal interrupt syncs up with the scanline test
-        sei
+        ;sei
 
         ; Disable run/stop + restore keys
-        lda #$FC 
-        sta $0328
+        ;lda #$FC 
+        ;sta $0328
 
         ;scroll 38 mode
         lda $D016
-        and #$F7
+        and #$F7 ;ora #$08
         sta $D016
         
         ; Set border and background colors
         ; The last 3 parameters are not used yet
-        LIBSCREEN_SETCOLORS Red, White, Black, Black, Black
+   ;     LIBSCREEN_SETCOLORS Red, White, Black, Black, Black
 
         ; Fill 1000 bytes (40x25) of screen memory 
-        LIBSCREEN_SET1000 SCREENRAM, 'a' ; 'a' maps to char 1
+    ;    LIBSCREEN_SET1000 SCREENRAM, 'a' ; 'a' maps to char 1
 
         ; Fill 1000 bytes (40x25) of color memory
-        LIBSCREEN_SET1000 COLORRAM, Black
+     ;   LIBSCREEN_SET1000 COLORRAM, Black
 
         
 
@@ -43,10 +43,11 @@
 gMLoop
 
         ;scroll 38 mode
-        lda $D016
+        ldx $D016
         and #$F7
-        adc #$00
-        sta $D016
+        inx 
+        stx $D016
+        LIBSCREEN_DEBUG8BIT_VVA $00,$00,$D016
 
         LIBSCREEN_WAIT_V 255
         ;inc EXTCOL ; start code timer change border color
