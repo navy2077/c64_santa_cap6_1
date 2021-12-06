@@ -1,0 +1,1167 @@
+00001  0000             ;===============================================================================
+00002  0001             ; BASIC LOADER
+00003  0001             
+00004  0001             *=$0801    ; 10 SYS (2064)
+00005  0801             
+00006  0801  0E 08 0A              BYTE $0E, $08, $0A, $00, $9E, $20, $28, $32
+00007  0809  30 36 34              BYTE $30, $36, $34, $29, $00, $00, $00
+00008  0810             
+00009  0810                        ; OUR CODE STARTS AT $0810 (2064 DECIMAL)
+00010  0810                        ; AFTER THE 15 BYTES FOR THE BASIC LOADER
+00011  0810             
+00012  0810             ;===============================================================================
+00013  0810             ; INITIALIZE
+00014  0810             
+00015  0810                        ; TURN OFF INTERRUPTS TO STOP LIBSCREEN_WAIT FAILING EVERY SO
+00016  0810                        ; OFTEN WHEN THE KERNAL INTERRUPT SYNCS UP WITH THE SCANLINE TEST
+00017  0810  78                    SEI
+00018  0811             
+00019  0811                        ; DISABLE RUN/STOP + RESTORE KEYS
+00020  0811  A9 FC                 LDA #$FC
+00021  0813  8D 28 03              STA $0328
+00022  0816             
+00023  0816                        ; SET BORDER AND BACKGROUND COLORS
+00024  0816                        ; THE LAST 3 PARAMETERS ARE NOT USED YET
+00025  0816             
+00026  0816             
+00027  0816                        
+00028  0816  A9 02                 LDA #RED
+00029  0818  8D 20 D0              STA EXTCOL
+00030  081B  A9 01                 LDA #WHITE
+00031  081D  8D 21 D0              STA BGCOL0
+00032  0820  A9 00                 LDA #BLACK
+00033  0822  8D 22 D0              STA BGCOL1
+00034  0825  A9 00                 LDA #BLACK
+00035  0827  8D 23 D0              STA BGCOL2
+00036  082A  A9 00                 LDA #BLACK
+00037  082C  8D 24 D0              STA BGCOL3
+00038  082F             
+00039  082F             
+00040  082F             
+00041  082F             
+00042  082F             
+00043  082F             
+00044  082F                        ; FILL 1000 BYTES (40X25) OF SCREEN MEMORY
+00045  082F             
+00046  082F             
+00047  082F             
+00048  082F  A9 01                 LDA #'A'
+00049  0831  A2 FA                 LDX #250
+00050  0833  CA         @LOOP      DEX
+00051  0834  9D 00 04              STA SCREENRAM,X
+00052  0837  9D FA 04              STA SCREENRAM+250,X
+00053  083A  9D F4 05              STA SCREENRAM+500,X
+00054  083D  9D EE 06              STA SCREENRAM+750,X
+00055  0840  D0 F1                 BNE @LOOP
+00056  0842             
+00057  0842             
+00058  0842             
+00059  0842                        ; FILL 1000 BYTES (40X25) OF COLOR MEMORY
+00060  0842             
+00061  0842             
+00062  0842             
+00063  0842  A9 00                 LDA #BLACK
+00064  0844  A2 FA                 LDX #250
+00065  0846  CA         @LOOP      DEX
+00066  0847  9D 00 D8              STA COLORRAM,X
+00067  084A  9D FA D8              STA COLORRAM+250,X
+00068  084D  9D F4 D9              STA COLORRAM+500,X
+00069  0850  9D EE DA              STA COLORRAM+750,X
+00070  0853  D0 F1                 BNE @LOOP
+00071  0855             
+00072  0855             
+00073  0855             
+00074  0855             ;===============================================================================
+00075  0855             ; UPDATE
+00076  0855             
+00077  0855             GMLOOP
+00078  0855             
+00079  0855             
+00080  0855  A9 FF      @LOOP      LDA #255
+00081  0857  CD 12 D0              CMP RASTER
+00082  085A  D0 F9                 BNE @LOOP
+00083  085C             
+00084  085C                        ;INC EXTCOL ; START CODE TIMER CHANGE BORDER COLOR
+00085  085C                        ; GAME UPDATE CODE GOES HERE
+00086  085C                        ;DEC EXTCOL ; END CODE TIMER RESET BORDER COLOR
+00087  085C  4C 55 08              JMP GMLOOP
+00088  085F             
+00089  085F             
+00090  085F             
+00091  085F             
+00092  085F             
+00093  085F             
+00094  085F             ;===============================================================================
+00095  085F             ; MACROS/SUBROUTINES
+00096  085F             
+00097  085F             DEFM       LIBMATH_ABS_AA  ; /1 = NUMBER (ADDRESS)
+00098  085F                        ; /2 = RESULT (ADDRESS)
+00099  085F                        LDA /1
+00100  085F                        BPL @POSITIVE
+00101  085F                        EOR #$FF        ; INVERT THE BITS
+00102  085F                        STA /2
+00103  085F                        INC /2          ; ADD 1 TO GIVE THE TWO'S COMPLIMENT
+00104  085F                        JMP @DONE
+00105  085F             @POSITIVE
+00106  085F                        STA /2
+00107  085F             @DONE
+00108  085F                        ENDM
+00109  085F             
+00110  085F             ;==============================================================================
+00111  085F             
+00112  085F             DEFM       LIBMATH_ADD8BIT_AAA
+00113  085F                        ; /1 = 1ST NUMBER (ADDRESS)
+00114  085F                        ; /2 = 2ND NUMBER (ADDRESS)
+00115  085F                        ; /3 = SUM (ADDRESS)
+00116  085F                        CLC     ; CLEAR CARRY BEFORE ADD
+00117  085F                        LDA /1  ; GET FIRST NUMBER
+00118  085F                        ADC /2 ; ADD TO SECOND NUMBER
+00119  085F                        STA /3  ; STORE IN SUM
+00120  085F                        ENDM
+00121  085F             
+00122  085F             ;==============================================================================
+00123  085F             
+00124  085F             DEFM       LIBMATH_ADD8BIT_AVA
+00125  085F                        ; /1 = 1ST NUMBER (ADDRESS)
+00126  085F                        ; /2 = 2ND NUMBER (VALUE)
+00127  085F                        ; /3 = SUM (ADDRESS)
+00128  085F                        CLC     ; CLEAR CARRY BEFORE ADD
+00129  085F                        LDA /1  ; GET FIRST NUMBER
+00130  085F                        ADC #/2 ; ADD TO SECOND NUMBER
+00131  085F                        STA /3  ; STORE IN SUM
+00132  085F                        ENDM
+00133  085F             
+00134  085F             ;==============================================================================
+00135  085F             
+00136  085F             DEFM       LIBMATH_ADD16BIT_AAVAAA
+00137  085F                        ; /1 = 1ST NUMBER HIGH BYTE (ADDRESS)
+00138  085F                        ; /2 = 1ST NUMBER LOW BYTE (ADDRESS)
+00139  085F                        ; /3 = 2ND NUMBER HIGH BYTE (VALUE)
+00140  085F                        ; /4 = 2ND NUMBER LOW BYTE (ADDRESS)
+00141  085F                        ; /5 = SUM HIGH BYTE (ADDRESS)
+00142  085F                        ; /6 = SUM LOW BYTE (ADDRESS)
+00143  085F                        CLC     ; CLEAR CARRY BEFORE FIRST ADD
+00144  085F                        LDA /2  ; GET LSB OF FIRST NUMBER
+00145  085F                        ADC /4  ; ADD LSB OF SECOND NUMBER
+00146  085F                        STA /6  ; STORE IN LSB OF SUM
+00147  085F                        LDA /1  ; GET MSB OF FIRST NUMBER
+00148  085F                        ADC #/3 ; ADD CARRY AND MSB OF NUM2
+00149  085F                        STA /5  ; STORE SUM IN MSB OF SUM
+00150  085F                        ENDM
+00151  085F             
+00152  085F             ;==============================================================================
+00153  085F             
+00154  085F             DEFM       LIBMATH_ADD16BIT_AAVVAA
+00155  085F                        ; /1 = 1ST NUMBER HIGH BYTE (ADDRESS)
+00156  085F                        ; /2 = 1ST NUMBER LOW BYTE (ADDRESS)
+00157  085F                        ; /3 = 2ND NUMBER HIGH BYTE (VALUE)
+00158  085F                        ; /4 = 2ND NUMBER LOW BYTE (VALUE)
+00159  085F                        ; /5 = SUM HIGH BYTE (ADDRESS)
+00160  085F                        ; /6 = SUM LOW BYTE (ADDRESS)
+00161  085F                        CLC     ; CLEAR CARRY BEFORE FIRST ADD
+00162  085F                        LDA /2  ; GET LSB OF FIRST NUMBER
+00163  085F                        ADC #/4 ; ADD LSB OF SECOND NUMBER
+00164  085F                        STA /6  ; STORE IN LSB OF SUM
+00165  085F                        LDA /1  ; GET MSB OF FIRST NUMBER
+00166  085F                        ADC #/3 ; ADD CARRY AND MSB OF NUM2
+00167  085F                        STA /5  ; STORE SUM IN MSB OF SUM
+00168  085F                        ENDM
+00169  085F             
+00170  085F             ;==============================================================================
+00171  085F             
+00172  085F             DEFM       LIBMATH_MIN8BIT_AV      ; /1 = NUMBER 1 (ADDRESS)
+00173  085F                        ; /2 = NUMBER 2 (VALUE)
+00174  085F                        
+00175  085F                        LDA #/2                 ; LOAD NUMBER 2
+00176  085F                        CMP /1                  ; COMPARE WITH NUMBER 1
+00177  085F                        BCS @SKIP               ; IF NUMBER 2 >= NUMBER 1 THEN SKIP
+00178  085F                        STA /1                  ; ELSE REPLACE NUMBER1 WITH NUMBER2
+00179  085F             @SKIP
+00180  085F                        ENDM
+00181  085F             
+00182  085F             ;==============================================================================
+00183  085F             
+00184  085F             DEFM       LIBMATH_MAX8BIT_AV      ; /1 = NUMBER 1 (ADDRESS)
+00185  085F                        ; /2 = NUMBER 2 (VALUE)
+00186  085F                        
+00187  085F                        LDA #/2                 ; LOAD NUMBER 2
+00188  085F                        CMP /1                  ; COMPARE WITH NUMBER 1
+00189  085F                        BCC @SKIP               ; IF NUMBER 2 < NUMBER 1 THEN SKIP
+00190  085F                        STA /1                  ; ELSE REPLACE NUMBER1 WITH NUMBER2
+00191  085F             @SKIP
+00192  085F                        ENDM
+00193  085F             
+00194  085F             ;==============================================================================
+00195  085F             
+00196  085F             DEFM       LIBMATH_MIN16BIT_AAVV   ; /1 = NUMBER 1 HIGH (ADDRESS)
+00197  085F                        ; /2 = NUMBER 1 LOW (ADDRESS)
+00198  085F                        ; /3 = NUMBER 2 HIGH (VALUE)
+00199  085F                        ; /4 = NUMBER 2 LOW (VALUE)
+00200  085F                        
+00201  085F                        ; HIGH BYTE
+00202  085F                        LDA /1                  ; LOAD NUMBER 1
+00203  085F                        CMP #/3                 ; COMPARE WITH NUMBER 2
+00204  085F                        BMI @SKIP               ; IF NUMBER 1 < NUMBER 2 THEN SKIP
+00205  085F                        LDA #/3
+00206  085F                        STA /1                  ; ELSE REPLACE NUMBER1 WITH NUMBER2
+00207  085F             
+00208  085F                        ; LOW BYTE
+00209  085F                        LDA #/4                 ; LOAD NUMBER 2
+00210  085F                        CMP /2                  ; COMPARE WITH NUMBER 1
+00211  085F                        BCS @SKIP               ; IF NUMBER 2 >= NUMBER 1 THEN SKIP
+00212  085F                        STA /2                  ; ELSE REPLACE NUMBER1 WITH NUMBER2
+00213  085F             @SKIP
+00214  085F                        ENDM
+00215  085F             
+00216  085F             ;==============================================================================
+00217  085F             
+00218  085F             DEFM       LIBMATH_MAX16BIT_AAVV   ; /1 = NUMBER 1 HIGH (ADDRESS)
+00219  085F                        ; /2 = NUMBER 1 LOW (ADDRESS)
+00220  085F                        ; /3 = NUMBER 2 HIGH (VALUE)
+00221  085F                        ; /4 = NUMBER 2 LOW (VALUE)
+00222  085F                        
+00223  085F                        ; HIGH BYTE
+00224  085F                        LDA #/3                 ; LOAD NUMBER 2
+00225  085F                        CMP /1                  ; COMPARE WITH NUMBER 1
+00226  085F                        BCC @SKIP               ; IF NUMBER 2 < NUMBER 1 THEN SKIP
+00227  085F                        STA /1                  ; ELSE REPLACE NUMBER1 WITH NUMBER2
+00228  085F             
+00229  085F                        ; LOW BYTE
+00230  085F                        LDA #/4                 ; LOAD NUMBER 2
+00231  085F                        CMP /2                  ; COMPARE WITH NUMBER 1
+00232  085F                        BCC @SKIP               ; IF NUMBER 2 < NUMBER 1 THEN SKIP
+00233  085F                        STA /2                  ; ELSE REPLACE NUMBER1 WITH NUMBER2
+00234  085F             
+00235  085F             @SKIP
+00236  085F                        ENDM
+00237  085F             
+00238  085F             ;==============================================================================
+00239  085F             
+00240  085F             DEFM       LIBMATH_SUB8BIT_AAA
+00241  085F                        ; /1 = 1ST NUMBER (ADDRESS)
+00242  085F                        ; /2 = 2ND NUMBER (ADDRESS)
+00243  085F                        ; /3 = SUM (ADDRESS)
+00244  085F                        SEC     ; SEC IS THE SAME AS CLEAR BORROW
+00245  085F                        LDA /1  ; GET FIRST NUMBER
+00246  085F                        SBC /2  ; SUBTRACT SECOND NUMBER
+00247  085F                        STA /3  ; STORE IN SUM
+00248  085F                        ENDM
+00249  085F             
+00250  085F             ;==============================================================================
+00251  085F             
+00252  085F             DEFM       LIBMATH_SUB8BIT_AVA
+00253  085F                        ; /1 = 1ST NUMBER (ADDRESS)
+00254  085F                        ; /2 = 2ND NUMBER (VALUE)
+00255  085F                        ; /3 = SUM (ADDRESS)
+00256  085F                        SEC     ; SEC IS THE SAME AS CLEAR BORROW
+00257  085F                        LDA /1  ; GET FIRST NUMBER
+00258  085F                        SBC #/2 ; SUBTRACT SECOND NUMBER
+00259  085F                        STA /3  ; STORE IN SUM
+00260  085F                        ENDM
+00261  085F             
+00262  085F             ;==============================================================================
+00263  085F             
+00264  085F             DEFM       LIBMATH_SUB16BIT_AAVAAA
+00265  085F                        ; /1 = 1ST NUMBER HIGH BYTE (ADDRESS)
+00266  085F                        ; /2 = 1ST NUMBER LOW BYTE (ADDRESS)
+00267  085F                        ; /3 = 2ND NUMBER HIGH BYTE (VALUE)
+00268  085F                        ; /4 = 2ND NUMBER LOW BYTE (ADDRESS)
+00269  085F                        ; /5 = SUM HIGH BYTE (ADDRESS)
+00270  085F                        ; /6 = SUM LOW BYTE (ADDRESS)
+00271  085F                        SEC     ; SEC IS THE SAME AS CLEAR BORROW
+00272  085F                        LDA /2  ; GET LSB OF FIRST NUMBER
+00273  085F                        SBC /4 ; SUBTRACT LSB OF SECOND NUMBER
+00274  085F                        STA /6  ; STORE IN LSB OF SUM
+00275  085F                        LDA /1  ; GET MSB OF FIRST NUMBER
+00276  085F                        SBC #/3 ; SUBTRACT BORROW AND MSB OF NUM2
+00277  085F                        STA /5  ; STORE SUM IN MSB OF SUM
+00278  085F                        ENDM
+00279  085F             
+00280  085F             ;==============================================================================
+00281  085F             
+00282  085F             DEFM       LIBMATH_SUB16BIT_AAVVAA
+00283  085F                        ; /1 = 1ST NUMBER HIGH BYTE (ADDRESS)
+00284  085F                        ; /2 = 1ST NUMBER LOW BYTE (ADDRESS)
+00285  085F                        ; /3 = 2ND NUMBER HIGH BYTE (VALUE)
+00286  085F                        ; /4 = 2ND NUMBER LOW BYTE (VALUE)
+00287  085F                        ; /5 = SUM HIGH BYTE (ADDRESS)
+00288  085F                        ; /6 = SUM LOW BYTE (ADDRESS)
+00289  085F                        SEC     ; SEC IS THE SAME AS CLEAR BORROW
+00290  085F                        LDA /2  ; GET LSB OF FIRST NUMBER
+00291  085F                        SBC #/4 ; SUBTRACT LSB OF SECOND NUMBER
+00292  085F                        STA /6  ; STORE IN LSB OF SUM
+00293  085F                        LDA /1  ; GET MSB OF FIRST NUMBER
+00294  085F                        SBC #/3 ; SUBTRACT BORROW AND MSB OF NUM2
+00295  085F                        STA /5  ; STORE SUM IN MSB OF SUM
+00296  085F                        ENDM
+00297  085F             
+00298  085F             ;===============================================================================
+00299  085F             ; CONSTANTS
+00300  085F             
+00301  085F             BLACK      = 0
+00302  085F             WHITE      = 1
+00303  085F             RED        = 2
+00304  085F             CYAN       = 3
+00305  085F             PURPLE     = 4
+00306  085F             GREEN      = 5
+00307  085F             BLUE       = 6
+00308  085F             YELLOW     = 7
+00309  085F             ORANGE     = 8
+00310  085F             BROWN      = 9
+00311  085F             LIGHTRED   = 10
+00312  085F             DARKGRAY   = 11
+00313  085F             MEDIUMGRAY = 12
+00314  085F             LIGHTGREEN = 13
+00315  085F             LIGHTBLUE  = 14
+00316  085F             LIGHTGRAY  = 15
+00317  085F             SPACECHARACTER = 32
+00318  085F             
+00319  085F             FALSE      = 0
+00320  085F             TRUE       = 1
+00321  085F             
+00322  085F             ;===============================================================================
+00323  085F             ; VARIABLES
+00324  085F             
+00325  085F             OPERATOR   CALC
+00326  085F             
+00327  085F             SCREENRAMROWSTARTLOW ;  SCREENRAM + 40*0, 40*1, 40*2 ... 40*24
+00328  085F  00 28 50              BYTE <SCREENRAM,     <SCREENRAM+40,  <SCREENRAM+80
+00329  0862  78 A0 C8              BYTE <SCREENRAM+120, <SCREENRAM+160, <SCREENRAM+200
+00330  0865  F0 18 40              BYTE <SCREENRAM+240, <SCREENRAM+280, <SCREENRAM+320
+00331  0868  68 90 B8              BYTE <SCREENRAM+360, <SCREENRAM+400, <SCREENRAM+440
+00332  086B  E0 08 30              BYTE <SCREENRAM+480, <SCREENRAM+520, <SCREENRAM+560
+00333  086E  58 80 A8              BYTE <SCREENRAM+600, <SCREENRAM+640, <SCREENRAM+680
+00334  0871  D0 F8 20              BYTE <SCREENRAM+720, <SCREENRAM+760, <SCREENRAM+800
+00335  0874  48 70 98              BYTE <SCREENRAM+840, <SCREENRAM+880, <SCREENRAM+920
+00336  0877  C0                    BYTE <SCREENRAM+960
+00337  0878             
+00338  0878             SCREENRAMROWSTARTHIGH ;  SCREENRAM + 40*0, 40*1, 40*2 ... 40*24
+00339  0878  04 04 04              BYTE >SCREENRAM,     >SCREENRAM+40,  >SCREENRAM+80
+00340  087B  04 04 04              BYTE >SCREENRAM+120, >SCREENRAM+160, >SCREENRAM+200
+00341  087E  04 05 05              BYTE >SCREENRAM+240, >SCREENRAM+280, >SCREENRAM+320
+00342  0881  05 05 05              BYTE >SCREENRAM+360, >SCREENRAM+400, >SCREENRAM+440
+00343  0884  05 06 06              BYTE >SCREENRAM+480, >SCREENRAM+520, >SCREENRAM+560
+00344  0887  06 06 06              BYTE >SCREENRAM+600, >SCREENRAM+640, >SCREENRAM+680
+00345  088A  06 06 07              BYTE >SCREENRAM+720, >SCREENRAM+760, >SCREENRAM+800
+00346  088D  07 07 07              BYTE >SCREENRAM+840, >SCREENRAM+880, >SCREENRAM+920
+00347  0890  07                    BYTE >SCREENRAM+960
+00348  0891             
+00349  0891             COLORRAMROWSTARTLOW ;  COLORRAM + 40*0, 40*1, 40*2 ... 40*24
+00350  0891  00 28 50              BYTE <COLORRAM,     <COLORRAM+40,  <COLORRAM+80
+00351  0894  78 A0 C8              BYTE <COLORRAM+120, <COLORRAM+160, <COLORRAM+200
+00352  0897  F0 18 40              BYTE <COLORRAM+240, <COLORRAM+280, <COLORRAM+320
+00353  089A  68 90 B8              BYTE <COLORRAM+360, <COLORRAM+400, <COLORRAM+440
+00354  089D  E0 08 30              BYTE <COLORRAM+480, <COLORRAM+520, <COLORRAM+560
+00355  08A0  58 80 A8              BYTE <COLORRAM+600, <COLORRAM+640, <COLORRAM+680
+00356  08A3  D0 F8 20              BYTE <COLORRAM+720, <COLORRAM+760, <COLORRAM+800
+00357  08A6  48 70 98              BYTE <COLORRAM+840, <COLORRAM+880, <COLORRAM+920
+00358  08A9  C0                    BYTE <COLORRAM+960
+00359  08AA             
+00360  08AA             COLORRAMROWSTARTHIGH ;  COLORRAM + 40*0, 40*1, 40*2 ... 40*24
+00361  08AA  D8 D8 D8              BYTE >COLORRAM,     >COLORRAM+40,  >COLORRAM+80
+00362  08AD  D8 D8 D8              BYTE >COLORRAM+120, >COLORRAM+160, >COLORRAM+200
+00363  08B0  D8 D9 D9              BYTE >COLORRAM+240, >COLORRAM+280, >COLORRAM+320
+00364  08B3  D9 D9 D9              BYTE >COLORRAM+360, >COLORRAM+400, >COLORRAM+440
+00365  08B6  D9 DA DA              BYTE >COLORRAM+480, >COLORRAM+520, >COLORRAM+560
+00366  08B9  DA DA DA              BYTE >COLORRAM+600, >COLORRAM+640, >COLORRAM+680
+00367  08BC  DA DA DB              BYTE >COLORRAM+720, >COLORRAM+760, >COLORRAM+800
+00368  08BF  DB DB DB              BYTE >COLORRAM+840, >COLORRAM+880, >COLORRAM+920
+00369  08C2  DB                    BYTE >COLORRAM+960
+00370  08C3             
+00371  08C3             OPERATOR   HILO
+00372  08C3             
+00373  08C3  00         SCREENCOLUMN BYTE 0
+00374  08C4  00         SCREENSCROLLXVALUE BYTE 0
+00375  08C5             
+00376  08C5             ;===============================================================================
+00377  08C5             ; MACROS/SUBROUTINES
+00378  08C5             
+00379  08C5             DEFM       LIBSCREEN_DEBUG8BIT_VVA
+00380  08C5                        ; /1 = X POSITION ABSOLUTE
+00381  08C5                        ; /2 = Y POSITION ABSOLUTE
+00382  08C5                        ; /3 = 1ST NUMBER LOW BYTE POINTER
+00383  08C5                        
+00384  08C5                        LDA #WHITE
+00385  08C5                        STA $0286       ; SET TEXT COLOR
+00386  08C5                        LDA #$20        ; SPACE
+00387  08C5                        JSR $FFD2       ; PRINT 4 SPACES
+00388  08C5                        JSR $FFD2
+00389  08C5                        JSR $FFD2
+00390  08C5                        JSR $FFD2
+00391  08C5                        ;JSR $E566      ; RESET CURSOR
+00392  08C5                        LDX #/2         ; SELECT ROW
+00393  08C5                        LDY #/1         ; SELECT COLUMN
+00394  08C5                        JSR $E50C       ; SET CURSOR
+00395  08C5             
+00396  08C5                        LDA #0
+00397  08C5                        LDX /3
+00398  08C5                        JSR $BDCD       ; PRINT NUMBER
+00399  08C5                        ENDM
+00400  08C5             
+00401  08C5             ;===============================================================================
+00402  08C5             
+00403  08C5             DEFM       LIBSCREEN_DEBUG16BIT_VVAA
+00404  08C5                        ; /1 = X POSITION ABSOLUTE
+00405  08C5                        ; /2 = Y POSITION ABSOLUTE
+00406  08C5                        ; /3 = 1ST NUMBER HIGH BYTE POINTER
+00407  08C5                        ; /4 = 1ST NUMBER LOW BYTE POINTER
+00408  08C5                        
+00409  08C5                        LDA #WHITE
+00410  08C5                        STA $0286       ; SET TEXT COLOR
+00411  08C5                        LDA #$20        ; SPACE
+00412  08C5                        JSR $FFD2       ; PRINT 4 SPACES
+00413  08C5                        JSR $FFD2
+00414  08C5                        JSR $FFD2
+00415  08C5                        JSR $FFD2
+00416  08C5                        ;JSR $E566      ; RESET CURSOR
+00417  08C5                        LDX #/2         ; SELECT ROW
+00418  08C5                        LDY #/1         ; SELECT COLUMN
+00419  08C5                        JSR $E50C       ; SET CURSOR
+00420  08C5             
+00421  08C5                        LDA /3
+00422  08C5                        LDX /4
+00423  08C5                        JSR $BDCD       ; PRINT NUMBER
+00424  08C5                        ENDM
+00425  08C5             
+00426  08C5             ;==============================================================================
+00427  08C5             
+00428  08C5             DEFM       LIBSCREEN_DRAWTEXT_AAAV ; /1 = X POSITION 0-39 (ADDRESS)
+00429  08C5                        ; /2 = Y POSITION 0-24 (ADDRESS)
+00430  08C5                        ; /3 = 0 TERMINATED STRING (ADDRESS)
+00431  08C5                        ; /4 = TEXT COLOR (VALUE)
+00432  08C5             
+00433  08C5                        LDY /2 ; LOAD Y POSITION AS INDEX INTO LIST
+00434  08C5                        
+00435  08C5                        LDA SCREENRAMROWSTARTLOW,Y ; LOAD LOW ADDRESS BYTE
+00436  08C5                        STA ZEROPAGELOW
+00437  08C5             
+00438  08C5                        LDA SCREENRAMROWSTARTHIGH,Y ; LOAD HIGH ADDRESS BYTE
+00439  08C5                        STA ZEROPAGEHIGH
+00440  08C5             
+00441  08C5                        LDY /1 ; LOAD X POSITION INTO Y REGISTER
+00442  08C5             
+00443  08C5                        LDX #0
+00444  08C5             @LOOP      LDA /3,X
+00445  08C5                        CMP #0
+00446  08C5                        BEQ @DONE
+00447  08C5                        STA (ZEROPAGELOW),Y
+00448  08C5                        INX
+00449  08C5                        INY
+00450  08C5                        JMP @LOOP
+00451  08C5             @DONE
+00452  08C5             
+00453  08C5             
+00454  08C5                        LDY /2 ; LOAD Y POSITION AS INDEX INTO LIST
+00455  08C5                        
+00456  08C5                        LDA COLORRAMROWSTARTLOW,Y ; LOAD LOW ADDRESS BYTE
+00457  08C5                        STA ZEROPAGELOW
+00458  08C5             
+00459  08C5                        LDA COLORRAMROWSTARTHIGH,Y ; LOAD HIGH ADDRESS BYTE
+00460  08C5                        STA ZEROPAGEHIGH
+00461  08C5             
+00462  08C5                        LDY /1 ; LOAD X POSITION INTO Y REGISTER
+00463  08C5             
+00464  08C5                        LDX #0
+00465  08C5             @LOOP2     LDA /3,X
+00466  08C5                        CMP #0
+00467  08C5                        BEQ @DONE2
+00468  08C5                        LDA #/4
+00469  08C5                        STA (ZEROPAGELOW),Y
+00470  08C5                        INX
+00471  08C5                        INY
+00472  08C5                        JMP @LOOP2
+00473  08C5             @DONE2
+00474  08C5             
+00475  08C5                        ENDM
+00476  08C5             
+00477  08C5             ;===============================================================================
+00478  08C5             
+00479  08C5             DEFM       LIBSCREEN_DRAWDECIMAL_AAAV ; /1 = X POSITION 0-39 (ADDRESS)
+00480  08C5                        ; /2 = Y POSITION 0-24 (ADDRESS)
+00481  08C5                        ; /3 = DECIMAL NUMBER 2 NYBBLES (ADDRESS)
+00482  08C5                        ; /4 = TEXT COLOR (VALUE)
+00483  08C5             
+00484  08C5                        LDY /2 ; LOAD Y POSITION AS INDEX INTO LIST
+00485  08C5                        
+00486  08C5                        LDA SCREENRAMROWSTARTLOW,Y ; LOAD LOW ADDRESS BYTE
+00487  08C5                        STA ZEROPAGELOW
+00488  08C5             
+00489  08C5                        LDA SCREENRAMROWSTARTHIGH,Y ; LOAD HIGH ADDRESS BYTE
+00490  08C5                        STA ZEROPAGEHIGH
+00491  08C5             
+00492  08C5                        LDY /1 ; LOAD X POSITION INTO Y REGISTER
+00493  08C5             
+00494  08C5                        ; GET HIGH NYBBLE
+00495  08C5                        LDA /3
+00496  08C5                        AND #$F0
+00497  08C5                        
+00498  08C5                        ; CONVERT TO ASCII
+00499  08C5                        LSR
+00500  08C5                        LSR
+00501  08C5                        LSR
+00502  08C5                        LSR
+00503  08C5                        ORA #$30
+00504  08C5             
+00505  08C5                        STA (ZEROPAGELOW),Y
+00506  08C5             
+00507  08C5                        ; MOVE ALONG TO NEXT SCREEN POSITION
+00508  08C5                        INY
+00509  08C5             
+00510  08C5                        ; GET LOW NYBBLE
+00511  08C5                        LDA /3
+00512  08C5                        AND #$0F
+00513  08C5             
+00514  08C5                        ; CONVERT TO ASCII
+00515  08C5                        ORA #$30
+00516  08C5             
+00517  08C5                        STA (ZEROPAGELOW),Y
+00518  08C5                        
+00519  08C5             
+00520  08C5                        ; NOW SET THE COLORS
+00521  08C5                        LDY /2 ; LOAD Y POSITION AS INDEX INTO LIST
+00522  08C5                        
+00523  08C5                        LDA COLORRAMROWSTARTLOW,Y ; LOAD LOW ADDRESS BYTE
+00524  08C5                        STA ZEROPAGELOW
+00525  08C5             
+00526  08C5                        LDA COLORRAMROWSTARTHIGH,Y ; LOAD HIGH ADDRESS BYTE
+00527  08C5                        STA ZEROPAGEHIGH
+00528  08C5             
+00529  08C5                        LDY /1 ; LOAD X POSITION INTO Y REGISTER
+00530  08C5             
+00531  08C5                        LDA #/4
+00532  08C5                        STA (ZEROPAGELOW),Y
+00533  08C5             
+00534  08C5                        ; MOVE ALONG TO NEXT SCREEN POSITION
+00535  08C5                        INY
+00536  08C5                        
+00537  08C5                        STA (ZEROPAGELOW),Y
+00538  08C5             
+00539  08C5                        ENDM
+00540  08C5             
+00541  08C5             ;==============================================================================
+00542  08C5             
+00543  08C5             DEFM       LIBSCREEN_GETCHAR  ; /1 = RETURN CHARACTER CODE (ADDRESS)
+00544  08C5                        LDA (ZEROPAGELOW),Y
+00545  08C5                        STA /1
+00546  08C5                        ENDM
+00547  08C5             
+00548  08C5             ;===============================================================================
+00549  08C5             
+00550  08C5             DEFM       LIBSCREEN_PIXELTOCHAR_AAVAVAAAA
+00551  08C5                        ; /1 = XHIGHPIXELS      (ADDRESS)
+00552  08C5                        ; /2 = XLOWPIXELS       (ADDRESS)
+00553  08C5                        ; /3 = XADJUST          (VALUE)
+00554  08C5                        ; /4 = YPIXELS          (ADDRESS)
+00555  08C5                        ; /5 = YADJUST          (VALUE)
+00556  08C5                        ; /6 = XCHAR            (ADDRESS)
+00557  08C5                        ; /7 = XOFFSET          (ADDRESS)
+00558  08C5                        ; /8 = YCHAR            (ADDRESS)
+00559  08C5                        ; /9 = YOFFSET          (ADDRESS)
+00560  08C5                        
+00561  08C5             
+00562  08C5                        LDA /1
+00563  08C5                        STA ZEROPAGEPARAM1
+00564  08C5                        LDA /2
+00565  08C5                        STA ZEROPAGEPARAM2
+00566  08C5                        LDA #/3
+00567  08C5                        STA ZEROPAGEPARAM3
+00568  08C5                        LDA /4
+00569  08C5                        STA ZEROPAGEPARAM4
+00570  08C5                        LDA #/5
+00571  08C5                        STA ZEROPAGEPARAM5
+00572  08C5                        
+00573  08C5                        JSR LIBSCREEN_PIXELTOCHAR
+00574  08C5             
+00575  08C5                        LDA ZEROPAGEPARAM6
+00576  08C5                        STA /6
+00577  08C5                        LDA ZEROPAGEPARAM7
+00578  08C5                        STA /7
+00579  08C5                        LDA ZEROPAGEPARAM8
+00580  08C5                        STA /8
+00581  08C5                        LDA ZEROPAGEPARAM9
+00582  08C5                        STA /9
+00583  08C5             
+00584  08C5                        ENDM
+00585  08C5             
+00586  08C5             LIBSCREEN_PIXELTOCHAR 
+00587  08C5             
+00588  08C5                        ; SUBTRACT XADJUST PIXELS FROM XPIXELS AS LEFT OF A SPRITE IS FIRST VISIBLE AT X = 24
+00589  08C5             
+00590  08C5             
+00591  08C5  38                    SEC
+00592  08C6  A5 74                 LDA ZEROPAGEPARAM2
+00593  08C8  E5 75                 SBC ZEROPAGEPARAM3
+00594  08CA  85 79                 STA ZEROPAGEPARAM7
+00595  08CC  A5 73                 LDA ZEROPAGEPARAM1
+00596  08CE  E9 00                 SBC #0
+00597  08D0  85 78                 STA ZEROPAGEPARAM6
+00598  08D2             
+00599  08D2             
+00600  08D2             
+00601  08D2             
+00602  08D2             
+00603  08D2             
+00604  08D2             
+00605  08D2  A5 78                 LDA ZEROPAGEPARAM6
+00606  08D4  85 02                 STA ZEROPAGETEMP
+00607  08D6             
+00608  08D6                        ; DIVIDE BY 8 TO GET CHARACTER X
+00609  08D6  A5 79                 LDA ZEROPAGEPARAM7
+00610  08D8  4A                    LSR A ; DIVIDE BY 2
+00611  08D9  4A                    LSR A ; AND AGAIN = /4
+00612  08DA  4A                    LSR A ; AND AGAIN = /8
+00613  08DB  85 78                 STA ZEROPAGEPARAM6
+00614  08DD             
+00615  08DD                        ; AND 7 TO GET PIXEL OFFSET X
+00616  08DD  A5 79                 LDA ZEROPAGEPARAM7
+00617  08DF  29 07                 AND #7
+00618  08E1  85 79                 STA ZEROPAGEPARAM7
+00619  08E3             
+00620  08E3                        ; ADJUST FOR XHIGH
+00621  08E3  A5 02                 LDA ZEROPAGETEMP
+00622  08E5  F0 07                 BEQ @NOTHIGH
+00623  08E7             
+00624  08E7             
+00625  08E7  18                    CLC
+00626  08E8  A5 78                 LDA ZEROPAGEPARAM6
+00627  08EA  69 20                 ADC #32
+00628  08EC  85 78                 STA ZEROPAGEPARAM6
+00629  08EE             
+00630  08EE             
+00631  08EE             
+00632  08EE             
+00633  08EE             @NOTHIGH
+00634  08EE                        ; SUBTRACT YADJUST PIXELS FROM YPIXELS AS TOP OF A SPRITE IS FIRST VISIBLE AT Y = 50
+00635  08EE             
+00636  08EE             
+00637  08EE  38                    SEC
+00638  08EF  A5 76                 LDA ZEROPAGEPARAM4
+00639  08F1  E5 77                 SBC ZEROPAGEPARAM5
+00640  08F3  85 7B                 STA ZEROPAGEPARAM9
+00641  08F5             
+00642  08F5             
+00643  08F5             
+00644  08F5             
+00645  08F5             
+00646  08F5                        ; DIVIDE BY 8 TO GET CHARACTER Y
+00647  08F5  A5 7B                 LDA ZEROPAGEPARAM9
+00648  08F7  4A                    LSR A ; DIVIDE BY 2
+00649  08F8  4A                    LSR A ; AND AGAIN = /4
+00650  08F9  4A                    LSR A ; AND AGAIN = /8
+00651  08FA  85 7A                 STA ZEROPAGEPARAM8
+00652  08FC             
+00653  08FC                        ; AND 7 TO GET PIXEL OFFSET Y
+00654  08FC  A5 7B                 LDA ZEROPAGEPARAM9
+00655  08FE  29 07                 AND #7
+00656  0900  85 7B                 STA ZEROPAGEPARAM9
+00657  0902             
+00658  0902  60                    RTS
+00659  0903             
+00660  0903             ;==============================================================================
+00661  0903             
+00662  0903             DEFM       LIBSCREEN_SCROLLXLEFT_A          ; /1 = UPDATE SUBROUTINE (ADDRESS)
+00663  0903             
+00664  0903                        DEC SCREENSCROLLXVALUE
+00665  0903                        LDA SCREENSCROLLXVALUE
+00666  0903                        AND #%00000111
+00667  0903                        STA SCREENSCROLLXVALUE
+00668  0903             
+00669  0903                        LDA SCROLX
+00670  0903                        AND #%11111000
+00671  0903                        ORA SCREENSCROLLXVALUE
+00672  0903                        STA SCROLX
+00673  0903             
+00674  0903                        LDA SCREENSCROLLXVALUE
+00675  0903                        CMP #7
+00676  0903                        BNE @FINISHED
+00677  0903             
+00678  0903                        ; MOVE TO NEXT COLUMN
+00679  0903                        INC SCREENCOLUMN
+00680  0903                        JSR /1 ; CALL THE PASSED IN FUNCTION TO UPDATE THE SCREEN ROWS
+00681  0903             @FINISHED
+00682  0903             
+00683  0903                        ENDM
+00684  0903             
+00685  0903             ;==============================================================================
+00686  0903             
+00687  0903             DEFM       LIBSCREEN_SCROLLXRIGHT_A         ; /1 = UPDATE SUBROUTINE (ADDRESS)
+00688  0903             
+00689  0903                        INC SCREENSCROLLXVALUE
+00690  0903                        LDA SCREENSCROLLXVALUE
+00691  0903                        AND #%00000111
+00692  0903                        STA SCREENSCROLLXVALUE
+00693  0903             
+00694  0903                        LDA SCROLX
+00695  0903                        AND #%11111000
+00696  0903                        ORA SCREENSCROLLXVALUE
+00697  0903                        STA SCROLX
+00698  0903             
+00699  0903                        LDA SCREENSCROLLXVALUE
+00700  0903                        CMP #0
+00701  0903                        BNE @FINISHED
+00702  0903             
+00703  0903                        ; MOVE TO PREVIOUS COLUMN
+00704  0903                        DEC SCREENCOLUMN
+00705  0903                        JSR /1 ; CALL THE PASSED IN FUNCTION TO UPDATE THE SCREEN ROWS
+00706  0903             @FINISHED
+00707  0903             
+00708  0903                        ENDM
+00709  0903             
+00710  0903             ;==============================================================================
+00711  0903             
+00712  0903             DEFM       LIBSCREEN_SCROLLXRESET_A         ; /1 = UPDATE SUBROUTINE (ADDRESS)
+00713  0903             
+00714  0903                        LDA #0
+00715  0903                        STA SCREENCOLUMN
+00716  0903                        STA SCREENSCROLLXVALUE
+00717  0903             
+00718  0903                        LDA SCROLX
+00719  0903                        AND #%11111000
+00720  0903                        ORA SCREENSCROLLXVALUE
+00721  0903                        STA SCROLX
+00722  0903             
+00723  0903                        JSR /1 ; CALL THE PASSED IN FUNCTION TO UPDATE THE SCREEN ROWS
+00724  0903             
+00725  0903                        ENDM
+00726  0903             
+00727  0903             ;==============================================================================
+00728  0903             
+00729  0903             DEFM       LIBSCREEN_SETSCROLLXVALUE_A     ; /1 = SCROLLX VALUE (ADDRESS)
+00730  0903             
+00731  0903                        LDA SCROLX
+00732  0903                        AND #%11111000
+00733  0903                        ORA /1
+00734  0903                        STA SCROLX
+00735  0903             
+00736  0903                        ENDM
+00737  0903             
+00738  0903             ;==============================================================================
+00739  0903             
+00740  0903             DEFM       LIBSCREEN_SETSCROLLXVALUE_V     ; /1 = SCROLLX VALUE (VALUE)
+00741  0903             
+00742  0903                        LDA SCROLX
+00743  0903                        AND #%11111000
+00744  0903                        ORA #/1
+00745  0903                        STA SCROLX
+00746  0903             
+00747  0903                        ENDM
+00748  0903             
+00749  0903             ;==============================================================================
+00750  0903             
+00751  0903             ; SETS 1000 BYTES OF MEMORY FROM START ADDRESS WITH A VALUE
+00752  0903             DEFM       LIBSCREEN_SET1000       ; /1 = START  (ADDRESS)
+00753  0903                        ; /2 = NUMBER (VALUE)
+00754  0903             
+00755  0903                        LDA #/2                 ; GET NUMBER TO SET
+00756  0903                        LDX #250                ; SET LOOP VALUE
+00757  0903             @LOOP      DEX                     ; STEP -1
+00758  0903                        STA /1,X                ; SET START + X
+00759  0903                        STA /1+250,X            ; SET START + 250 + X
+00760  0903                        STA /1+500,X            ; SET START + 500 + X
+00761  0903                        STA /1+750,X            ; SET START + 750 + X
+00762  0903                        BNE @LOOP               ; IF X<>0 LOOP
+00763  0903             
+00764  0903                        ENDM
+00765  0903             
+00766  0903             ;==============================================================================
+00767  0903             
+00768  0903             DEFM       LIBSCREEN_SET38COLUMNMODE
+00769  0903             
+00770  0903                        LDA SCROLX
+00771  0903                        AND #%11110111 ; CLEAR BIT 3
+00772  0903                        STA SCROLX
+00773  0903             
+00774  0903                        ENDM
+00775  0903             
+00776  0903             ;==============================================================================
+00777  0903             
+00778  0903             DEFM       LIBSCREEN_SET40COLUMNMODE
+00779  0903             
+00780  0903                        LDA SCROLX
+00781  0903                        ORA #%00001000 ; SET BIT 3
+00782  0903                        STA SCROLX
+00783  0903             
+00784  0903                        ENDM
+00785  0903             
+00786  0903             ;==============================================================================
+00787  0903             
+00788  0903             DEFM       LIBSCREEN_SETCHARMEMORY  ; /1 = CHARACTER MEMORY SLOT (VALUE)
+00789  0903                        ; POINT VIC (LOWER 4 BITS OF $D018)TO NEW CHARACTER DATA
+00790  0903                        LDA VMCSB
+00791  0903                        AND #%11110000 ; KEEP HIGHER 4 BITS
+00792  0903                        ; P208 M JONG BOOK
+00793  0903                        ORA #/1;$0E ; MAPS TO  $3800 MEMORY ADDRESS
+00794  0903                        STA VMCSB
+00795  0903                        ENDM
+00796  0903             
+00797  0903             ;==============================================================================
+00798  0903             
+00799  0903             DEFM       LIBSCREEN_SETCHAR_V  ; /1 = CHARACTER CODE (VALUE)
+00800  0903                        LDA #/1
+00801  0903                        STA (ZEROPAGELOW),Y
+00802  0903                        ENDM
+00803  0903             
+00804  0903             ;==============================================================================
+00805  0903             
+00806  0903             DEFM       LIBSCREEN_SETCHAR_A  ; /1 = CHARACTER CODE (ADDRESS)
+00807  0903                        LDA /1
+00808  0903                        STA (ZEROPAGELOW),Y
+00809  0903                        ENDM
+00810  0903             
+00811  0903             ;==============================================================================
+00812  0903             
+00813  0903             DEFM       LIBSCREEN_SETCHARPOSITION_AA    ; /1 = X POSITION 0-39 (ADDRESS)
+00814  0903                        ; /2 = Y POSITION 0-24 (ADDRESS)
+00815  0903                        
+00816  0903                        LDY /2 ; LOAD Y POSITION AS INDEX INTO LIST
+00817  0903                        
+00818  0903                        LDA SCREENRAMROWSTARTLOW,Y ; LOAD LOW ADDRESS BYTE
+00819  0903                        STA ZEROPAGELOW
+00820  0903             
+00821  0903                        LDA SCREENRAMROWSTARTHIGH,Y ; LOAD HIGH ADDRESS BYTE
+00822  0903                        STA ZEROPAGEHIGH
+00823  0903             
+00824  0903                        LDY /1 ; LOAD X POSITION INTO Y REGISTER
+00825  0903             
+00826  0903                        ENDM
+00827  0903             
+00828  0903             ;==============================================================================
+00829  0903             
+00830  0903             DEFM       LIBSCREEN_SETCOLORPOSITION_AA   ; /1 = X POSITION 0-39 (ADDRESS)
+00831  0903                        ; /2 = Y POSITION 0-24 (ADDRESS)
+00832  0903                        
+00833  0903                        LDY /2 ; LOAD Y POSITION AS INDEX INTO LIST
+00834  0903                        
+00835  0903                        LDA COLORRAMROWSTARTLOW,Y ; LOAD LOW ADDRESS BYTE
+00836  0903                        STA ZEROPAGELOW
+00837  0903             
+00838  0903                        LDA COLORRAMROWSTARTHIGH,Y ; LOAD HIGH ADDRESS BYTE
+00839  0903                        STA ZEROPAGEHIGH
+00840  0903             
+00841  0903                        LDY /1 ; LOAD X POSITION INTO Y REGISTER
+00842  0903             
+00843  0903                        ENDM
+00844  0903             
+00845  0903             ;===============================================================================
+00846  0903             
+00847  0903             ; SETS THE BORDER AND BACKGROUND COLORS
+00848  0903             DEFM       LIBSCREEN_SETCOLORS     ; /1 = BORDER COLOR       (VALUE)
+00849  0903                        ; /2 = BACKGROUND COLOR 0 (VALUE)
+00850  0903                        ; /3 = BACKGROUND COLOR 1 (VALUE)
+00851  0903                        ; /4 = BACKGROUND COLOR 2 (VALUE)
+00852  0903                        ; /5 = BACKGROUND COLOR 3 (VALUE)
+00853  0903                        
+00854  0903                        LDA #/1                 ; COLOR0 -> A
+00855  0903                        STA EXTCOL              ; A -> EXTCOL
+00856  0903                        LDA #/2                 ; COLOR1 -> A
+00857  0903                        STA BGCOL0              ; A -> BGCOL0
+00858  0903                        LDA #/3                 ; COLOR2 -> A
+00859  0903                        STA BGCOL1              ; A -> BGCOL1
+00860  0903                        LDA #/4                 ; COLOR3 -> A
+00861  0903                        STA BGCOL2              ; A -> BGCOL2
+00862  0903                        LDA #/5                 ; COLOR4 -> A
+00863  0903                        STA BGCOL3              ; A -> BGCOL3
+00864  0903             
+00865  0903                        ENDM
+00866  0903             
+00867  0903             ;==============================================================================
+00868  0903             
+00869  0903             DEFM       LIBSCREEN_SETMULTICOLORMODE
+00870  0903             
+00871  0903                        LDA SCROLX
+00872  0903                        ORA #%00010000 ; SET BIT 5
+00873  0903                        STA SCROLX
+00874  0903             
+00875  0903                        ENDM
+00876  0903             
+00877  0903             ;===============================================================================
+00878  0903             
+00879  0903             ; WAITS FOR A GIVEN SCANLINE
+00880  0903             DEFM       LIBSCREEN_WAIT_V        ; /1 = SCANLINE (VALUE)
+00881  0903             
+00882  0903             @LOOP      LDA #/1                 ; SCANLINE -> A
+00883  0903                        CMP RASTER              ; COMPARE A TO CURRENT RASTER LINE
+00884  0903                        BNE @LOOP               ; LOOP IF RASTER LINE NOT REACHED 255
+00885  0903             
+00886  0903                        ENDM
+00887  0903             
+00888  0903             
+00889  0903             
+00890  0903             ;===============================================================================
+00891  0903             ; $00-$FF  PAGE ZERO (256 BYTES)
+00892  0903                        
+00893  0903                        ; $00-$01   RESERVED FOR IO
+00894  0903             ZEROPAGETEMP = $02
+00895  0903                        ; $03-$8F   RESERVED FOR BASIC
+00896  0903                        ; USING $73-$8A CHRGET AS BASIC NOT USED FOR OUR GAME
+00897  0903             ZEROPAGEPARAM1 = $73
+00898  0903             ZEROPAGEPARAM2 = $74
+00899  0903             ZEROPAGEPARAM3 = $75
+00900  0903             ZEROPAGEPARAM4 = $76
+00901  0903             ZEROPAGEPARAM5 = $77
+00902  0903             ZEROPAGEPARAM6 = $78
+00903  0903             ZEROPAGEPARAM7 = $79
+00904  0903             ZEROPAGEPARAM8 = $7A
+00905  0903             ZEROPAGEPARAM9 = $7B
+00906  0903                        ; $90-$FA   RESERVED FOR KERNAL
+00907  0903             ZEROPAGELOW = $FB
+00908  0903             ZEROPAGEHIGH = $FC
+00909  0903             ZEROPAGELOW2 = $FD
+00910  0903             ZEROPAGEHIGH2 = $FE
+00911  0903                        ; $FF       RESERVED FOR KERNAL
+00912  0903             
+00913  0903             ;===============================================================================
+00914  0903             ; $0100-$01FF  STACK (256 BYTES)
+00915  0903             
+00916  0903             
+00917  0903             ;===============================================================================
+00918  0903             ; $0200-$9FFF  RAM (40K)
+00919  0903             
+00920  0903             SCREENRAM  = $0400
+00921  0903             SPRITE0    = $07F8
+00922  0903             
+00923  0903             ; $0801
+00924  0903             ; GAME CODE IS PLACED HERE BY USING THE *=$0801 DIRECTIVE
+00925  0903             ; IN GAMEMAIN.ASM
+00926  0903             
+00927  0903             
+00928  0903             ;===============================================================================
+00929  0903             ; $A000-$BFFF  BASIC ROM (8K)
+00930  0903             
+00931  0903             
+00932  0903             ;===============================================================================
+00933  0903             ; $C000-$CFFF  RAM (4K)
+00934  0903             
+00935  0903             
+00936  0903             ;===============================================================================
+00937  0903             ; $D000-$DFFF  IO (4K)
+00938  0903             
+00939  0903             ; THESE ARE SOME OF THE C64 REGISTERS THAT ARE MAPPED INTO
+00940  0903             ; IO MEMORY SPACE
+00941  0903             ; NAMES TAKEN FROM 'MAPPING THE COMMODORE 64' BOOK
+00942  0903             
+00943  0903             SP0X       = $D000
+00944  0903             SP0Y       = $D001
+00945  0903             MSIGX      = $D010
+00946  0903             RASTER     = $D012
+00947  0903             SPENA      = $D015
+00948  0903             SCROLX     = $D016
+00949  0903             VMCSB      = $D018
+00950  0903             SPBGPR     = $D01B
+00951  0903             SPMC       = $D01C
+00952  0903             SPSPCL     = $D01E
+00953  0903             EXTCOL     = $D020
+00954  0903             BGCOL0     = $D021
+00955  0903             BGCOL1     = $D022
+00956  0903             BGCOL2     = $D023
+00957  0903             BGCOL3     = $D024
+00958  0903             SPMC0      = $D025
+00959  0903             SPMC1      = $D026
+00960  0903             SP0COL     = $D027
+00961  0903             FRELO1     = $D400 ;(54272)
+00962  0903             FREHI1     = $D401 ;(54273)
+00963  0903             PWLO1      = $D402 ;(54274)
+00964  0903             PWHI1      = $D403 ;(54275)
+00965  0903             VCREG1     = $D404 ;(54276)
+00966  0903             ATDCY1     = $D405 ;(54277)
+00967  0903             SUREL1     = $D406 ;(54278)
+00968  0903             FRELO2     = $D407 ;(54279)
+00969  0903             FREHI2     = $D408 ;(54280)
+00970  0903             PWLO2      = $D409 ;(54281)
+00971  0903             PWHI2      = $D40A ;(54282)
+00972  0903             VCREG2     = $D40B ;(54283)
+00973  0903             ATDCY2     = $D40C ;(54284)
+00974  0903             SUREL2     = $D40D ;(54285)
+00975  0903             FRELO3     = $D40E ;(54286)
+00976  0903             FREHI3     = $D40F ;(54287)
+00977  0903             PWLO3      = $D410 ;(54288)
+00978  0903             PWHI3      = $D411 ;(54289)
+00979  0903             VCREG3     = $D412 ;(54290)
+00980  0903             ATDCY3     = $D413 ;(54291)
+00981  0903             SUREL3     = $D414 ;(54292)
+00982  0903             SIGVOL     = $D418 ;(54296)
+00983  0903             COLORRAM   = $D800
+00984  0903             CIAPRA     = $DC00
+00985  0903             CIAPRB     = $DC01
+00986  0903             
+00987  0903             ;===============================================================================
+00988  0903             ; $E000-$FFFF  KERNAL ROM (8K)
+00989  0903             
+00990  0903             
+00991  0903             ;===============================================================================
+00992  0903             
+
+******* 11 Label(s) *******
+~~~loop{00001} = $0833 
+~~~loop{00002} = $0846 
+~~~loop{00003} = $0855 
+ColorRAMRowStartHigh = $08AA 
+ColorRAMRowStartLow = $0891 
+gMLoop = $0855 
+libScreen_PixelToChar = $08C5 
+screenColumn = $08C3 
+ScreenRAMRowStartHigh = $0878 
+ScreenRAMRowStartLow = $085F 
+screenScrollXValue = $08C4 
+
+******* 10 Unused label(s) *******
+@nothigh
+~~~loop{00001}
+~~~loop{00002}
+~~~loop{00003}
+ColorRAMRowStartHigh
+ColorRAMRowStartLow
+libScreen_PixelToChar
+screenColumn
+ScreenRAMRowStartHigh
+ScreenRAMRowStartLow
+screenScrollXValue
+
+******* 79 Variable(s) *******
+ATDCY1  = $D405
+ATDCY2  = $D40C
+ATDCY3  = $D413
+BGCOL0  = $D021
+BGCOL1  = $D022
+BGCOL2  = $D023
+BGCOL3  = $D024
+Black  = $0000
+Blue  = $0006
+Brown  = $0009
+CIAPRA  = $DC00
+CIAPRB  = $DC01
+COLORRAM  = $D800
+Cyan  = $0003
+DarkGray  = $000B
+EXTCOL  = $D020
+False  = $0000
+FREHI1  = $D401
+FREHI2  = $D408
+FREHI3  = $D40F
+FRELO1  = $D400
+FRELO2  = $D407
+FRELO3  = $D40E
+Green  = $0005
+LightBlue  = $000E
+LightGray  = $000F
+LightGreen  = $000D
+LightRed  = $000A
+MediumGray  = $000C
+MSIGX  = $D010
+Orange  = $0008
+Purple  = $0004
+PWHI1  = $D403
+PWHI2  = $D40A
+PWHI3  = $D411
+PWLO1  = $D402
+PWLO2  = $D409
+PWLO3  = $D410
+RASTER  = $D012
+Red  = $0002
+SCREENRAM  = $0400
+SCROLX  = $D016
+SIGVOL  = $D418
+SP0COL  = $D027
+SP0X  = $D000
+SP0Y  = $D001
+SpaceCharacter  = $0020
+SPBGPR  = $D01B
+SPENA  = $D015
+SPMC  = $D01C
+SPMC0  = $D025
+SPMC1  = $D026
+SPRITE0  = $07F8
+SPSPCL  = $D01E
+SUREL1  = $D406
+SUREL2  = $D40D
+SUREL3  = $D414
+tgt_c64  = $0001
+True  = $0001
+VCREG1  = $D404
+VCREG2  = $D40B
+VCREG3  = $D412
+VMCSB  = $D018
+White  = $0001
+Yellow  = $0007
+ZeroPageHigh  = $00FC
+ZeroPageHigh2  = $00FE
+ZeroPageLow  = $00FB
+ZeroPageLow2  = $00FD
+ZeroPageParam1  = $0073
+ZeroPageParam2  = $0074
+ZeroPageParam3  = $0075
+ZeroPageParam4  = $0076
+ZeroPageParam5  = $0077
+ZeroPageParam6  = $0078
+ZeroPageParam7  = $0079
+ZeroPageParam8  = $007A
+ZeroPageParam9  = $007B
+ZeroPageTemp  = $0002
+******* 65 Unused variables(s) *******
+ATDCY1
+ATDCY2
+ATDCY3
+BGCOL0
+BGCOL1
+BGCOL2
+BGCOL3
+Blue
+Brown
+CIAPRA
+CIAPRB
+COLORRAM
+Cyan
+DarkGray
+EXTCOL
+False
+FREHI1
+FREHI2
+FREHI3
+FRELO1
+FRELO2
+FRELO3
+Green
+LightBlue
+LightGray
+LightGreen
+LightRed
+MediumGray
+MSIGX
+Orange
+Purple
+PWHI1
+PWHI2
+PWHI3
+PWLO1
+PWLO2
+PWLO3
+RASTER
+SCREENRAM
+SCROLX
+SIGVOL
+SP0COL
+SP0X
+SP0Y
+SpaceCharacter
+SPBGPR
+SPENA
+SPMC
+SPMC0
+SPMC1
+SPRITE0
+SPSPCL
+SUREL1
+SUREL2
+SUREL3
+tgt_c64
+True
+VCREG1
+VCREG2
+VCREG3
+VMCSB
+Yellow
+ZeroPageHigh
+ZeroPageHigh2
+ZeroPageLow
+ZeroPageLow2
+
