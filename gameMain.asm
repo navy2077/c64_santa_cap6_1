@@ -20,6 +20,11 @@
         lda #$FC 
         sta $0328
 
+        ;scroll 38 mode
+        lda $D016
+        and #$F7
+        sta $D016
+        
         ; Set border and background colors
         ; The last 3 parameters are not used yet
         LIBSCREEN_SETCOLORS Red, White, Black, Black, Black
@@ -30,10 +35,19 @@
         ; Fill 1000 bytes (40x25) of color memory
         LIBSCREEN_SET1000 COLORRAM, Black
 
+        
+
 ;===============================================================================
 ; Update
 
 gMLoop
+
+        ;scroll 38 mode
+        lda $D016
+        and #$F7
+        adc #$00
+        sta $D016
+
         LIBSCREEN_WAIT_V 255
         ;inc EXTCOL ; start code timer change border color
         ; Game update code goes here
